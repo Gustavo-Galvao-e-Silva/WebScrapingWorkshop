@@ -1,44 +1,51 @@
-#Add imports
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+from typing import List, Dict, Optional
+import time
+import random
 
 
-#Get base URL
-base_url = 
+base_url = "https://boardgamegeek.com/browse/boardgame"
 
-def get_page_html(): #Add page number parameter and type hinting
+def get_page_html(page_number: int) -> str:
     url = f"{base_url}/page/{page_number}"
 
     try:
-        #Add get request
-        #Add raise error
-        #Add text return
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raises an HTTPError for bad status codes
+        return response.text
 
-    except RequestException as e:
+    except Exception as e:
         print(f"Error getting page {page_number}: {str(e)}")
 
 
 def parse_game_row(row: BeautifulSoup) -> Optional[Dict[str, str]]:
     try:
-        #Get the rank with find method
+        # Get the rank
+        rank_cell = row.find("td", {"class": "collection_rank"})
         if not rank_cell:
             return None
-        #Assign value for rank
+        rank = int(rank_cell.text.strip())
 
-        #Get the name
-        name_cell = row.find()
+        # Get the name
+        name_cell = row.find("td", {"class": "collection_objectname"})
         if not name_cell or not name_cell.a:
             return None
         name = name_cell.a.text.strip()
 
-        #Get the year
+        # Get the year
         year_cell = name_cell.find("span", {"class": "smallerfont"})
         year = year_cell.text.strip("()") if year_cell else "N/A"
 
-        #Get the ratings
+            # Get the ratings
         rating_data = row.find_all(class_="collection_bggrating")
 
-        #Only process if we have all three rating values
+        # Only process if we have all three rating values
         if len(rating_data) >= 3:
-            #Add assignments for rating data
+            geek_rating = float(rating_data[0].text.strip())
+            average_rating = float(rating_data[1].text.strip())
+            num_voters = int(rating_data[2].text.strip())
         else:
             return None
 
@@ -58,23 +65,23 @@ def parse_game_row(row: BeautifulSoup) -> Optional[Dict[str, str]]:
 def scrape_page(page_number: int) -> List[Dict[str, str]]:
     """Scrape a single page of board game data."""
     try:
-        #Get HTML
-        #Instantiate HTML parser
+        html = get_page_html(page_number)
+        soup = BeautifulSoup(html, "html.parser")
 
-        #Find the games table
-        games_table = soup.find()
+        # Find the games table
+        games_table = soup.find("table", {"class": "collection_table"})
         if not games_table:
              print(f"No games table found on page {page_number}")
              return []
 
-        #Find all game rows
-        rows = games_table.find_all("tr", {"id": }) #Add lambda function that returns rows in the table
+        # Find all game rows
+        rows = games_table.find_all("tr", {"id": lambda x: x and x.startswith("row_")})
         if not rows:
             print(f"No game rows found on page {page_number}")
             return []
 
-        #Parse each row and filter out None values
-        games = [] #Double list comprehension to get the list of games
+            # Parse each row and filter out None values
+        games = [game for game in (parse_game_row(row) for row in rows) if game is not None]
         print(f"Found {len(games)} games on page {page_number}")
         return games
 
@@ -82,12 +89,17 @@ def scrape_page(page_number: int) -> List[Dict[str, str]]:
         print(f"Error scraping page {page_number}: {str(e)}")
         return []
 
-def scrape_pages(): #Add num_pages parameter and type hinting
+def scrape_pages(num_pages: int) -> List[Dict[str, str]]:
     """Scrape multiple pages of board game data."""
 
     all_games = []
-    #Loop to scrape all games
-        
+    for page in range(1, num_pages + 1):
+        print(f"Scraping page {page}/{num_pages}")
+        games = scrape_page(page) 
+        all_games.extend(games)
+        sleep_time = 3 + random.uniform(-1.0, 2.0)
+        time.sleep(sleep_time)  # Be nice to the server
+
     print(f"Successfully scraped {len(all_games)} games out of {num_pages} pages")
     return all_games
 
@@ -100,9 +112,8 @@ def write_to_csv(data: List[Dict[str, str]], file_name: str = "boardgames.csv") 
             print("No data to write")
             return
 
-        #Create directory if it doesn't exist
-
-        #Write to CSV pandas method
+        df = pd.DataFrame(data)
+        df.to_csv(file_name, index=False)
         print(f"Successfully wrote {len(data)} records to {file_name}")
     except Exception as e:
         print(f"Error writing to CSV: {str(e)}")
@@ -111,12 +122,11 @@ def write_to_csv(data: List[Dict[str, str]], file_name: str = "boardgames.csv") 
 def main() -> None:
     """Main function to run the scraper."""
     try:
-        #Get and validate number of pages
-
-        #Call scraper function
-
+        # Get and validate number of pages
+        num_pages = int(input("How many pages to scrape (1-10): "))
+        # Initialize scraper and get data
         print(f"\nStarting to scrape {num_pages} pages...")
-        
+        games_data = scrape_pages(num_pages=num_pages)
 
         if not games_data:
             print("No data was collected. Exiting...")
@@ -126,7 +136,7 @@ def main() -> None:
 
         # Write data to files
         print("\nSaving data to files...")
-
+        write_to_csv(games_data)
 
         print("\nScript completed successfully!")
 
@@ -134,4 +144,5 @@ def main() -> None:
         print(f"\nError occurred: {e}")
 
 
-#Make it run babyy :)
+if __name__ == "__main__":
+    main()
